@@ -73,6 +73,79 @@ export class AudioSys {
     this.sirenGain.gain.setTargetAtTime(on ? 0.028 : 0, this.ctx.currentTime, 0.2);
   }
 
+  // Helicopter rotor: a low sawtooth chopped by an 11 Hz square LFO.
+  // Louder the higher the heli flies.
+  setRotor(on, alt01) {
+    if (!this.ctx) return;
+    if (!this.rotorOsc) {
+      try {
+        this.rotorOsc = this.ctx.createOscillator();
+        this.rotorOsc.type = 'sawtooth';
+        this.rotorOsc.frequency.value = 82;
+        this.rotorGain = this.ctx.createGain();
+        this.rotorGain.gain.value = 0;
+        const lfo = this.ctx.createOscillator();
+        lfo.type = 'square';
+        lfo.frequency.value = 11;
+        const lg = this.ctx.createGain();
+        lg.gain.value = 0.014;
+        lfo.connect(lg);
+        lg.connect(this.rotorGain.gain);
+        this.rotorOsc.connect(this.rotorGain);
+        this.rotorGain.connect(this.master);
+        this.rotorOsc.start();
+        lfo.start();
+      } catch { this.rotorOsc = null; return; }
+    }
+    this.rotorGain.gain.setTargetAtTime(on ? 0.02 + alt01 * 0.03 : 0, this.ctx.currentTime, 0.15);
+  }
+
+  // The PD heli announcing itself.
+  sirenHeli() {
+    this._tone(660, 0.16, 0.2, 'square', 880);
+    setTimeout(() => this._tone(880, 0.16, 0.2, 'square', 660), 180);
+  }
+
+  // In-car radio: a tiny step sequencer. Each station is a bpm + root +
+  // scale (see config RADIO_STATIONS); every step plays a bass note on the
+  // beat and a lead note walking the scale. A lookahead timer keeps the
+  // loop steady; -1 switches the radio off.
+  setRadio(station) {
+    if (!this.ctx) return;
+    if (station < 0) {
+      if (this.radioTimer) { clearInterval(this.radioTimer); this.radioTimer = null; }
+      this.radioStation = -1;
+      return;
+    }
+    if (this.radioStation === station && this.radioTimer) return;
+    this.radioStation = station;
+    if (this.radioTimer) clearInterval(this.radioTimer);
+    this.radioStep = 0;
+    // Station data is passed in through the window hook the game sets:
+    // radio.js hands the station object to audio via setRadioStation.
+    const st = this.radioData;
+    if (!st) return;
+    const stepMs = (60 / st.bpm / 4) * 1000;
+    this.radioTimer = setInterval(() => {
+      if (!this.ctx || this.radioStation < 0) return;
+      const step = this.radioStep++ % 16;
+      const scale = st.scale;
+      const root = st.root;
+      // Bass on the beat, root or fifth.
+      if (step % 4 === 0) {
+        const semis = step === 8 ? 7 : 0;
+        this._tone(root / 2 * Math.pow(2, semis / 12), 0.22, 0.16, 'triangle');
+      }
+      // Lead walks the scale, one note per step, seeded by the station.
+      const idx = (step * 2 + (st.tag === 'latin' ? 1 : 0) + (step % 3)) % scale.length;
+      const semis = scale[idx] + 12;
+      if (step % 2 === 0) this._tone(root * Math.pow(2, semis / 12), 0.14, 0.07, 'square');
+    }, stepMs);
+  }
+
+  // The game hands the current station's data here before setRadio plays it.
+  setRadioStationData(st) { this.radioData = st; }
+
   _burst(duration, filterFreq, gain, type = 'lowpass') {
     if (!this.ctx) return;
     const t = this.ctx.currentTime;

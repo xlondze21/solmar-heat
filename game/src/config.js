@@ -56,7 +56,7 @@ export const TUNING = {
   maxWanted: 5,
   wantedDecayDelay: 20,   // seconds without a crime before stars start falling
   wantedDecayStep: 8,     // seconds per star once decaying
-  bustHoldTime: 2.5,      // seconds a cop must sit on a slow player to bust them
+  bustHoldTime: 3.5,      // seconds a cop must sit on a near-stopped player to bust them
   bustLossFrac: 0.2,      // cash lost when busted
   bustLossMin: 50,
   wastedLoss: 100,
@@ -65,7 +65,50 @@ export const TUNING = {
   pedCount: 26,
   copChaseRange: 1400,
   dayLength: 240,         // seconds for a full day/dusk cycle
+  // Helicopters.
+  heliMaxSpeed: 300,
+  heliAccel: 170,
+  heliClimb: 150,
+  heliMaxAlt: 240,
+  heliHp: 100,
+  heliSpawnWanted: 3,    // police heli shows up at this many stars
+  heliRotorDps: 1400,    // rotor spin, degrees per second (visual)
+  // Garage + safehouse.
+  safehouseClearTime: 3, // seconds inside to clear the heat
+  garageStock: [
+    { type: 'sports', price: 800, color: '#22c1a3' },
+    { type: 'taxi', price: 350, color: '#f2c230' },
+    { type: 'truck', price: 500, color: '#6b7c8a' },
+  ],
 };
+
+// In-car radio: three synthesized stations (WebAudio loops, no audio files).
+export const RADIO_STATIONS = [
+  { name: 'SOLMAR FM 88.5', tag: 'chill', bpm: 96,  root: 220.00, scale: [0, 3, 5, 7, 10] },
+  { name: 'NEON 101', tag: 'drive', bpm: 128, root: 246.94, scale: [0, 2, 3, 7, 9] },
+  { name: 'PALMA 76', tag: 'latin', bpm: 112, root: 196.00, scale: [0, 2, 4, 7, 9] },
+];
+
+// The tide: 0 = low (the beach is a wide open road), 1 = high (the sea eats
+// the sand). One full cycle takes TIDE_PERIOD seconds; the water line moves
+// between SAND_Y + 40 (low) and SAND_Y + 320 (high) — at high tide most of
+// the beach is underwater and cars wallow.
+export const TIDE_PERIOD = 360;
+export const TIDE_LOW_Y = 4740;   // water line at low tide (sand fully dry)
+export const TIDE_HIGH_Y = 4520;  // water line at high tide (sand drowned)
+
+// Rival-gang territory: coloured districts on the minimap and the ground.
+// Crimes committed inside a rival district draw +1 extra wanted star.
+export const TERRITORIES = [
+  { name: 'VIPERS', color: '#c0392b', x0: 3800, y0: 3800, x1: 4800, y1: 4480, label: 'East Docks — Vipers turf' },
+  { name: 'GULLS', color: '#7d5ba6', x0: 200, y0: 200, x1: 1800, y1: 1800, label: 'Old Town — Gulls turf' },
+  { name: 'PALMEROS', color: '#1e8449', x0: 200, y0: 3000, x1: 1800, y1: 4480, label: 'West Beach — Palmeros turf' },
+];
+
+// Street rep: Rico's name on the street. +10 per mission done. The garage
+// sports car only sells to drivers with rep 20+ (two jobs done).
+export const REP_PER_MISSION = 10;
+export const REP_SPORTS_CAR = 20;
 
 // Mission script — Rico, a driver for hire in Solmar.
 export const MISSIONS = [
@@ -103,6 +146,47 @@ export const MISSIONS = [
       ] },
     ],
   },
+  {
+    id: 'gullrun', name: 'The Gull Run', reward: 900,
+    intro: 'The crew keeps a helicopter on the hospital pad. Fly it out over the marina and spot the smuggler boat for Marisol.',
+    stages: [
+      { type: 'goto', label: 'Get to the hospital helipad', x: 2820, y: 2620, radius: 80 },
+      { type: 'enter-heli', label: 'Board the helicopter (press E)' },
+      { type: 'goto', label: 'Fly over the marina buoy — 90s', x: 620, y: 4620, radius: 90, timer: 90 },
+      { type: 'goto', label: 'Land at the Fish Market', x: 4480, y: 4380, radius: 90 },
+    ],
+  },
+  {
+    id: 'fishmarket', name: 'Fish Market Heist', reward: 750,
+    intro: 'Three crates of "frozen fish" at the market, one buyer at the safehouse. Grab them, then run — 120 seconds.',
+    stages: [
+      { type: 'collect', label: 'Grab the 3 crates at the Fish Market', count: 3, spots: [
+        { x: 4400, y: 4280 }, { x: 4580, y: 4360 }, { x: 4480, y: 4470 },
+      ] },
+      { type: 'goto', label: 'Get the crates to the Safehouse — 120s', x: 1000, y: 3400, radius: 70, timer: 120 },
+    ],
+  },
+  {
+    id: 'tiderunner', name: 'Tide Runner', reward: 1000,
+    intro: 'The tide is out and the beach is an open highway. Three flags down the sand — 45 seconds each. When the sea comes back, the road is gone.',
+    setTide: 0.05,
+    stages: [
+      { type: 'goto', label: 'Flag 1: West Beach — 45s', x: 800, y: 4580, radius: 80, timer: 45 },
+      { type: 'goto', label: 'Flag 2: Mid Beach — 45s', x: 2400, y: 4580, radius: 80, timer: 45 },
+      { type: 'goto', label: 'Flag 3: East Beach — 45s', x: 4200, y: 4580, radius: 80, timer: 45 },
+    ],
+  },
+  {
+    id: 'decodash', name: 'Deco Dash', reward: 1200,
+    intro: 'Neon night in the old town. Four checkpoints through the art-deco streets, 70 seconds each. The whole quarter is watching.',
+    setTimeOfDay: 0.52,
+    stages: [
+      { type: 'goto', label: 'Checkpoint 1: Palm Court — 70s', x: 1400, y: 200, radius: 80, timer: 70 },
+      { type: 'goto', label: 'Checkpoint 2: Deco Row — 70s', x: 220, y: 1400, radius: 80, timer: 70 },
+      { type: 'goto', label: 'Checkpoint 3: Old Theatre — 70s', x: 1400, y: 1400, radius: 80, timer: 70 },
+      { type: 'goto', label: 'Finish: Marina Gate — 70s', x: 240, y: 4380, radius: 80, timer: 70 },
+    ],
+  },
 ];
 
 export const LANDMARKS = {
@@ -112,7 +196,10 @@ export const LANDMARKS = {
   northTower: { x: 4380, y: 260, label: 'North Tower' },
   gunShop: { x: 1020, y: 1020, label: 'AMMU-NATION' },
   hospital: { x: 2600, y: 2600, label: 'Solmar General' },
+  helipad: { x: 2820, y: 2620, label: 'Helipad' },
+  garage: { x: 1400, y: 3400, label: 'Rico\'s Garage' },
+  safehouse: { x: 1000, y: 3400, label: 'Safehouse' },
   respawn: { x: 2600, y: 2500 },
 };
 
-export const SAVE_KEY = 'solmar-heat-save-v1';
+export const SAVE_KEY = 'solmar-heat-save-v2';

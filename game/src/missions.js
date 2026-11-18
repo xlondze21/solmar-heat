@@ -3,14 +3,15 @@
 // is a list of stages (enter a car, drive to a marker, beat a timer, raise
 // then lose the heat, collect drops). The tracker text is what the HUD shows.
 
-import { MISSIONS } from './config.js';
+import { MISSIONS, REP_PER_MISSION } from './config.js';
+import { waterLineY } from './world.js';
 
 export function createMissionState() {
   return {
     index: 0,          // which mission is current
     stage: 0,          // which stage inside it
     timer: 0,          // seconds left on a timed stage (0 = untimed)
-    done: [false, false, false, false],
+    done: [false, false, false, false, false, false, false, false],
     failed: false,
     message: '',
     messageT: 0,
@@ -59,6 +60,15 @@ export function startMission(game, index) {
   m.stage = 0;
   m.failed = false;
   const mission = MISSIONS[index];
+  // Some jobs set the scene: Tide Runner starts at low tide, Deco Dash at dusk.
+  // The tide hook must set the phase too — the loop recomputes the tide from
+  // the phase every frame, so setting game.tide alone would be overwritten.
+  if (mission.setTide !== undefined) {
+    game.tide = mission.setTide;
+    game.tidePhase = Math.acos(1 - 2 * mission.setTide) / (2 * Math.PI);
+    game.waterLineY = waterLineY(game.tide);
+  }
+  if (mission.setTimeOfDay !== undefined) game.timeOfDay = mission.setTimeOfDay;
   beginStage(game, mission.stages[0]);
   setMessage(game, `${mission.name} — ${mission.intro}`, 5);
   game.audio.blip();
@@ -69,10 +79,11 @@ function advanceStage(game) {
   const mission = currentMission(m);
   m.stage += 1;
   if (m.stage >= mission.stages.length) {
-    // Mission complete: pay out and roll to the next job.
+    // Mission complete: pay out, grow Rico's rep, roll to the next job.
     m.done[m.index] = true;
     game.player.cash += mission.reward;
-    setMessage(game, `${mission.name} complete! +$${mission.reward}`, 5);
+    game.rep += REP_PER_MISSION;
+    setMessage(game, `${mission.name} complete! +$${mission.reward}  ·  REP ${game.rep}`, 5);
     game.audio.missionDone();
     game.save();
     m.index += 1;
@@ -137,6 +148,8 @@ export function updateMissions(game, dt) {
 
   if (stage.type === 'enter-car') {
     if (p.inCar) advanceStage(game);
+  } else if (stage.type === 'enter-heli') {
+    if (p.inHeli) advanceStage(game);
   } else if (stage.type === 'goto') {
     if (Math.hypot(px - stage.x, py - stage.y) < stage.radius) advanceStage(game);
   } else if (stage.type === 'wanted') {
