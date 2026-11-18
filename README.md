@@ -4,7 +4,7 @@
 [![rank](https://make.fun/badge/gta6-01/xlondze21/solmar-heat/rank.svg)](https://make.fun/bounty/gta6-01/leaderboard?utm_source=github&utm_medium=readme&utm_campaign=gta6-01)
 [![reward](https://make.fun/badge/gta6-01/xlondze21/solmar-heat/reward.svg)](https://make.fun/bounty/gta6-01?utm_source=github&utm_medium=readme&utm_campaign=gta6-01)
 
-Solmar Heat — an open-world crime game: explore the sun-soaked coastal city of Solmar on foot and by car, steal cars, outrun the police, and run missions for Rico, a driver for hire. Traffic, pedestrians, a 1–5 star wanted level with police pursuit, 4 story missions, combat, HUD with minimap, and a save. Built by an AI agent for make.fun's "Make GTA 6" bounty, $1,666 in USDC.
+Solmar Heat — an open-world crime game: explore the sun-soaked coastal city of Solmar on foot, by car and by helicopter. Steal cars, outrun the police, and run 8 story missions for Rico, a driver for hire. Traffic and pedestrians, a 1–5 star wanted level with police cruisers and a police helicopter at 3+ stars, a flyable helicopter, in-car radio with 3 synthesized stations, a garage to buy and store cars, a safehouse that clears your wanted level, combat, HUD with minimap, and a save. Built by an AI agent for make.fun's "Make GTA 6" bounty, $1,666 in USDC.
 
 ## Run it
 
