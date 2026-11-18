@@ -147,10 +147,13 @@ function updateCop(game, cop, dt) {
   cop.x += Math.cos(cop.angle) * cop.speed * dt;
   cop.y += Math.sin(cop.angle) * cop.speed * dt;
   if (collideBuildings(game.city, cop, 20) && Math.abs(cop.speed) > 120) cop.speed *= 0.5;
-  clampToWorld(cop, 24);
+  clampToWorld(cop, 24, game.waterLineY);
 
-  // Bust: a cop sitting on a slow player holds them until the cuffs come out.
-  if (game.wanted > 0 && dist < 58 && playerSpeed < 26) {
+  // Bust: a cop sitting on a near-stopped player holds them until the cuffs
+  // come out. A player in the air cannot be busted — the cuffs stay on the
+  // ground. The speed bar is low on purpose: a driver braking for a turn is
+  // not a sitting duck, only a stopped one is.
+  if (game.wanted > 0 && !p.inHeli && dist < 58 && playerSpeed < 15) {
     game.bustTimer += dt;
     if (game.bustTimer > TUNING.bustHoldTime) game.busted = true;
   }
@@ -200,6 +203,8 @@ export function updatePolice(game, dt) {
 
 export function addWanted(game, n, reason) {
   if (game.wanted >= TUNING.maxWanted) return;
+  // Rival turf: a crime on someone else's streets draws one extra star.
+  if (game.territoryName) n += 1;
   game.wanted = Math.min(TUNING.maxWanted, game.wanted + n);
   game.lastCrimeAt = game.time;
   game.wantedNote = reason;

@@ -2,10 +2,13 @@
 // The city itself: a road grid, building blocks, the south beach, traffic
 // lights, landmarks. Pure data + geometry helpers; no drawing here.
 
-import { WORLD_W, WORLD_H, ROAD_W, ROAD_CENTERS, SAND_Y, WATER_Y, LANDMARKS } from './config.js';
+import { WORLD_W, WORLD_H, ROAD_W, ROAD_CENTERS, SAND_Y, WATER_Y, LANDMARKS, TIDE_LOW_Y, TIDE_HIGH_Y } from './config.js';
 
 const BUILDING_COLORS = ['#c98a5e', '#7fa3b8', '#b87f8a', '#8aa87f', '#c9b458', '#9a8ac9', '#d8d8d8', '#e0a080'];
 const ROOF_COLORS = ['#3a3f47', '#4a3a3a', '#37474f', '#5d4037'];
+
+const NEON_SIGNS = ['HOTEL', 'BAR', '24H', 'CAFE', 'TACOS', 'NEON', 'MOTEL', 'PIER', 'DISCO'];
+const NEON_COLORS = ['#ff2d78', '#22c1a3', '#f2c230', '#7a5cff', '#ff6b35'];
 
 export function buildCity(rng) {
   const buildings = [];
@@ -32,14 +35,21 @@ export function buildCity(rng) {
           roof: rng.pick(ROOF_COLORS),
           floors: rng.int(1, 4),
           windows: rng.int(2, 5),
+          // Art-deco Solmar: a third of the buildings carry a neon sign,
+          // the tallest get a rooftop antenna.
+          neon: rng.chance(0.35) ? { text: rng.pick(NEON_SIGNS), color: rng.pick(NEON_COLORS) } : null,
+          antenna: h > 120 && rng.chance(0.5),
         });
       }
     }
   }
-  // Palm trees along the beachfront road.
+  // Palm trees along the beachfront road and the marina walk.
   for (let x = 120; x < WORLD_W - 100; x += rng.range(110, 190)) {
     palms.push({ x, y: SAND_Y + rng.range(24, 60), s: rng.range(0.8, 1.3) });
     if (rng.chance(0.5)) palms.push({ x: x + 40, y: SAND_Y - 70, s: rng.range(0.7, 1.1) });
+  }
+  for (let y = 300; y < 4300; y += rng.range(260, 420)) {
+    palms.push({ x: 150 + rng.range(0, 40), y, s: rng.range(0.7, 1.1) });
   }
   // Traffic lights at every second intersection, phases offset per corner.
   const lights = [];
@@ -48,7 +58,7 @@ export function buildCity(rng) {
       lights.push({ x: ROAD_CENTERS[i], y: ROAD_CENTERS[j], offset: (i * 0.13 + j * 0.07) % 1 });
     }
   }
-  return { buildings, palms, lights, gunShop: LANDMARKS.gunShop, hospital: LANDMARKS.hospital };
+  return { buildings, palms, lights, gunShop: LANDMARKS.gunShop, hospital: LANDMARKS.hospital, garage: LANDMARKS.garage, safehouse: LANDMARKS.safehouse, helipad: LANDMARKS.helipad };
 }
 
 // --- geometry helpers -------------------------------------------------------
@@ -110,10 +120,16 @@ export function collideBuildings(city, e, r) {
   return hit;
 }
 
-export function clampToWorld(e, r) {
+export function clampToWorld(e, r, waterY = WATER_Y) {
   e.x = Math.max(r, Math.min(WORLD_W - r, e.x));
   e.y = Math.max(r, Math.min(WORLD_H - r, e.y));
-  if (e.y > WATER_Y - r) e.y = WATER_Y - r; // the sea is not drivable
+  if (e.y > waterY - r) e.y = waterY - r; // the sea is not drivable
+}
+
+// The tide's water line: tide 0 = low (water at TIDE_LOW_Y, sand dry),
+// tide 1 = high (water at TIDE_HIGH_Y, sand drowned).
+export function waterLineY(tide) {
+  return TIDE_LOW_Y - tide * (TIDE_LOW_Y - TIDE_HIGH_Y);
 }
 
 export function inWater(x, y) { return y >= WATER_Y; }

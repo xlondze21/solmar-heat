@@ -169,7 +169,7 @@ function updateTrafficCar(game, car, dt) {
   if (car.axis === 'v') car.x += (laneTarget - car.x) * Math.min(1, 1.6 * dt);
   else car.y += (laneTarget - car.y) * Math.min(1, 1.6 * dt);
   if (collideBuildings(game.city, car, 20) && Math.abs(car.speed) > 120) car.speed *= 0.4;
-  clampToWorld(car, 24);
+  clampToWorld(car, 24, game.waterLineY);
 }
 
 export function updateTraffic(game, dt) {
@@ -182,7 +182,7 @@ export function updateTraffic(game, dt) {
         car.x += Math.cos(car.angle) * car.speed * dt;
         car.y += Math.sin(car.angle) * car.speed * dt;
         if (collideBuildings(game.city, car, 20)) car.speed *= 0.5;
-        clampToWorld(car, 24);
+        clampToWorld(car, 24, game.waterLineY);
       }
       continue;
     }
@@ -226,8 +226,9 @@ export function collideCars(a, b, now = 0) {
   const facingAway = fx * awayX + fy * awayY > 0;
   const shove = Math.min(160, Math.abs(faster.speed) * 1.05);
   // A car shoved backwards only bounces back a little: a full-reverse
-  // launch leaves the driver fighting inverted steering for seconds.
-  slower.speed = facingAway ? shove : -Math.min(60, shove);
+  // launch leaves the driver fighting inverted steering for seconds, and
+  // a cruiser sitting on a fleeing car could pin it in reverse forever.
+  slower.speed = facingAway ? shove : -Math.min(30, shove);
   faster.speed *= 0.92;
   return impact;
 }

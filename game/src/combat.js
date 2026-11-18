@@ -6,6 +6,7 @@
 import { TUNING, LANDMARKS } from './config.js';
 import { scarePeds } from './pedestrians.js';
 import { addWanted } from './police.js';
+import { damageHeli } from './helicopter.js';
 
 export function aimAngle(game) {
   // Mouse position on screen -> world angle from the player.
@@ -69,11 +70,19 @@ export function tryShoot(game) {
   };
   for (const ped of game.peds) if (ped.state !== 'down') consider(ped.x, ped.y, { kind: 'ped', ped });
   for (const car of game.cars) consider(car.x, car.y, { kind: 'car', car });
+  // The police heli is a fair target too: bring it down and the PD backs off.
+  for (const heli of game.helis) {
+    if (heli.kind !== 'police' || heli.crashing || heli.gone) continue;
+    consider(heli.x, heli.y, { kind: 'heli', heli });
+  }
   if (!best) return;
   if (best.kind === 'ped') {
     best.ped.state = 'down';
     best.ped.stateT = 4;
     game.addParticle(best.ped.x, best.ped.y, '#ff5555', 10);
+  } else if (best.kind === 'heli') {
+    damageHeli(game, best.heli, TUNING.pistolDamage);
+    game.addParticle(best.heli.x, best.heli.y, '#ffb347', 10);
   } else {
     damageCar(game, best.car, TUNING.pistolDamage);
     game.addParticle(best.car.x, best.car.y, '#ffb347', 10);

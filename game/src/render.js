@@ -2,7 +2,7 @@
 // Every pixel of the city: ground, roads, beach, buildings, cars, people,
 // skid marks, smoke, sparks, and the day/dusk light. Reads game state only.
 
-import { WORLD_W, WORLD_H, ROAD_CENTERS, ROAD_W, SAND_Y, WATER_Y, PALETTE } from './config.js';
+import { WORLD_W, WORLD_H, ROAD_CENTERS, ROAD_W, SAND_Y, WATER_Y, PALETTE, TERRITORIES } from './config.js';
 import { lightPhase } from './world.js';
 import { missionMarker } from './missions.js';
 
@@ -49,18 +49,30 @@ function drawGround(game, ctx, vis) {
       ctx.fillRect(x0, y0, x1 - x0, y1 - y0);
     }
   }
-  // Beach sand and water along the south edge.
+  // Beach sand and water along the south edge — the water line rides the tide.
+  const wl = game.waterLineY;
   if (vis.y1 > SAND_Y) {
     ctx.fillStyle = PALETTE.sand;
-    ctx.fillRect(vis.x0, Math.max(vis.y0, SAND_Y), vis.x1 - vis.x0, WATER_Y - Math.max(vis.y0, SAND_Y));
+    ctx.fillRect(vis.x0, Math.max(vis.y0, SAND_Y), vis.x1 - vis.x0, wl - Math.max(vis.y0, SAND_Y));
     ctx.fillStyle = PALETTE.water;
-    ctx.fillRect(vis.x0, Math.max(vis.y0, WATER_Y), vis.x1 - vis.x0, WORLD_H - Math.max(vis.y0, WATER_Y));
+    ctx.fillRect(vis.x0, Math.max(vis.y0, wl), vis.x1 - vis.x0, WORLD_H - Math.max(vis.y0, wl));
     ctx.fillStyle = PALETTE.waterDeep;
     const t = game.time * 0.7;
     for (let x = Math.floor(vis.x0 / 90) * 90; x < vis.x1; x += 90) {
-      const yy = WATER_Y + 26 + Math.sin(t + x * 0.01) * 6;
+      const yy = wl + 26 + Math.sin(t + x * 0.01) * 6;
       ctx.fillRect(x, yy, 54, 3);
     }
+  }
+  // Rival turf tints on the ground — faint, so the streets still read.
+  for (const tr of TERRITORIES) {
+    if (tr.x1 < vis.x0 || tr.x0 > vis.x1 || tr.y1 < vis.y0 || tr.y0 > vis.y1) continue;
+    ctx.fillStyle = tr.color + '2e';
+    ctx.fillRect(tr.x0, tr.y0, tr.x1 - tr.x0, tr.y1 - tr.y0);
+    ctx.strokeStyle = tr.color + '88';
+    ctx.lineWidth = 3;
+    ctx.setLineDash([14, 10]);
+    ctx.strokeRect(tr.x0, tr.y0, tr.x1 - tr.x0, tr.y1 - tr.y0);
+    ctx.setLineDash([]);
   }
   // Roads: dark asphalt bands with dashed centre lines.
   ctx.fillStyle = PALETTE.road;
@@ -97,6 +109,30 @@ function drawBuildings(game, ctx, vis) {
         const wy = b.y + 14 + (j * (b.h - 28)) / Math.max(1, rows - 1 || 1);
         ctx.fillRect(wx, wy, 7, 9);
       }
+    }
+    // Neon sign on the roofline — Solmar's art-deco glow, strongest at dusk.
+    if (b.neon) {
+      const glow = 0.55 + 0.45 * dusk;
+      ctx.globalAlpha = glow;
+      ctx.fillStyle = b.neon.color;
+      ctx.font = 'bold 13px sans-serif';
+      ctx.textAlign = 'center';
+      ctx.fillText(b.neon.text, b.x + b.w / 2, b.y - 4);
+      ctx.fillRect(b.x + b.w / 2 - 22, b.y - 1, 44, 2);
+      ctx.globalAlpha = 1;
+    }
+    // Rooftop antenna on the tallest blocks.
+    if (b.antenna) {
+      ctx.strokeStyle = '#c8cdd4';
+      ctx.lineWidth = 2;
+      ctx.beginPath();
+      ctx.moveTo(b.x + b.w / 2, b.y + 6);
+      ctx.lineTo(b.x + b.w / 2, b.y - 18);
+      ctx.stroke();
+      ctx.fillStyle = dusk > 0.25 ? '#ff2d2d' : '#e5484d';
+      ctx.beginPath();
+      ctx.arc(b.x + b.w / 2, b.y - 20, 3, 0, Math.PI * 2);
+      ctx.fill();
     }
   }
   // Palm trees on the beachfront.
@@ -154,6 +190,47 @@ function drawLights(game, ctx, vis) {
     ctx.font = 'bold 11px sans-serif';
     ctx.textAlign = 'center';
     ctx.fillText('AMMO', g.x, g.y + 30);
+  }
+  // Garage, safehouse and helipad markers.
+  const marks = [
+    { x: game.city.garage.x, y: game.city.garage.y, label: 'GARAGE', color: '#f26522' },
+    { x: game.city.safehouse.x, y: game.city.safehouse.y, label: 'SAFEHOUSE', color: '#37d67a' },
+    { x: game.city.helipad.x, y: game.city.helipad.y, label: 'HELIPAD', color: '#7a5cff' },
+  ];
+  for (const mk of marks) {
+    if (mk.x < vis.x0 || mk.x > vis.x1 || mk.y < vis.y0 || mk.y > vis.y1) continue;
+    const pulse = 1 + Math.sin(game.time * 4 + mk.x) * 0.12;
+    ctx.save();
+    ctx.translate(mk.x, mk.y);
+    ctx.scale(pulse, pulse);
+    ctx.fillStyle = mk.color;
+    ctx.beginPath();
+    ctx.arc(0, 0, 15, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.fillStyle = '#fff';
+    ctx.font = 'bold 13px sans-serif';
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    ctx.fillText(mk.label[0], 0, 1);
+    ctx.restore();
+    ctx.fillStyle = '#fff';
+    ctx.font = 'bold 10px sans-serif';
+    ctx.textAlign = 'center';
+    ctx.fillText(mk.label, mk.x, mk.y + 28);
+  }
+  // Helipad ring on the hospital pad.
+  const hp = game.city.helipad;
+  if (hp.x > vis.x0 && hp.x < vis.x1 && hp.y > vis.y0 && hp.y < vis.y1) {
+    ctx.strokeStyle = 'rgba(255,255,255,0.7)';
+    ctx.lineWidth = 3;
+    ctx.beginPath();
+    ctx.arc(hp.x, hp.y, 42, 0, Math.PI * 2);
+    ctx.stroke();
+    ctx.fillStyle = 'rgba(255,255,255,0.7)';
+    ctx.font = 'bold 22px sans-serif';
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    ctx.fillText('H', hp.x, hp.y);
   }
   // Mission marker + collectible drops.
   const marker = missionMarker(game);
@@ -267,6 +344,79 @@ function drawPed(ctx, p) {
   ctx.restore();
 }
 
+function drawHeliShadow(game, ctx, heli) {
+  // The shadow sits on the ground below the heli, offset by altitude.
+  const s = 1 - heli.alt / 480;
+  ctx.fillStyle = `rgba(0,0,0,${0.35 * s})`;
+  ctx.beginPath();
+  ctx.ellipse(heli.x + heli.alt * 0.25, heli.y + heli.alt * 0.35, 26 * s + 8, 12 * s + 5, heli.angle, 0, Math.PI * 2);
+  ctx.fill();
+}
+
+function drawHeli(game, ctx, heli) {
+  // Police spotlight: a cone from the heli down onto the player.
+  if (heli.kind === 'police' && heli.spotlight && !heli.crashing) {
+    const p = game.player;
+    const px = p.inHeli ? p.inHeli.x : p.inCar ? p.inCar.x : p.x;
+    const py = p.inHeli ? p.inHeli.y : p.inCar ? p.inCar.y : p.y;
+    const grad = ctx.createRadialGradient(px, py, 10, px, py, 130);
+    grad.addColorStop(0, 'rgba(255,240,170,0.30)');
+    grad.addColorStop(1, 'rgba(255,240,170,0)');
+    ctx.fillStyle = grad;
+    ctx.beginPath();
+    ctx.arc(px, py, 130, 0, Math.PI * 2);
+    ctx.fill();
+  }
+  ctx.save();
+  ctx.translate(heli.x, heli.y);
+  ctx.rotate(heli.angle);
+  // Rotor disc (spins with heli.rotor).
+  ctx.save();
+  ctx.rotate((heli.rotor * Math.PI) / 180);
+  ctx.strokeStyle = 'rgba(200,205,215,0.75)';
+  ctx.lineWidth = 3;
+  ctx.beginPath();
+  ctx.moveTo(-34, 0);
+  ctx.lineTo(34, 0);
+  ctx.moveTo(0, -34);
+  ctx.lineTo(0, 34);
+  ctx.stroke();
+  ctx.restore();
+  // Tail + body.
+  ctx.fillStyle = heli.kind === 'police' ? '#1d3fae' : heli.kind === 'player' ? '#e83e8c' : '#c8cdd4';
+  ctx.fillRect(-34, -3, 22, 6);
+  ctx.fillStyle = heli.kind === 'police' ? '#f5f5f5' : '#2c2f36';
+  roundRect(ctx, -14, -11, 30, 22, 8);
+  ctx.fill();
+  // Canopy + police flash.
+  ctx.fillStyle = 'rgba(140,220,255,0.9)';
+  ctx.beginPath();
+  ctx.arc(10, 0, 6, 0, Math.PI * 2);
+  ctx.fill();
+  if (heli.kind === 'police') {
+    const flash = Math.floor(performance.now() / 260) % 2 === 0;
+    ctx.fillStyle = flash ? '#ff2d2d' : '#2d6bff';
+    ctx.beginPath(); ctx.arc(-6, -8, 3.5, 0, Math.PI * 2); ctx.fill();
+    ctx.fillStyle = flash ? '#2d6bff' : '#ff2d2d';
+    ctx.beginPath(); ctx.arc(4, -8, 3.5, 0, Math.PI * 2); ctx.fill();
+  }
+  // Crash smoke.
+  if (heli.crashing) {
+    ctx.fillStyle = 'rgba(90,90,90,0.6)';
+    ctx.beginPath();
+    ctx.arc(-6, 0, 9, 0, Math.PI * 2);
+    ctx.fill();
+  }
+  ctx.restore();
+  // Altitude tag for the player's heli.
+  if (heli.kind === 'player' && heli.alt > 10) {
+    ctx.fillStyle = '#fff';
+    ctx.font = 'bold 11px sans-serif';
+    ctx.textAlign = 'center';
+    ctx.fillText(`ALT ${Math.round(heli.alt)}`, heli.x, heli.y - 44);
+  }
+}
+
 function drawPlayer(ctx, game) {
   const p = game.player;
   if (p.inCar) return; // the car drawing carries the player
@@ -352,6 +502,10 @@ export function renderGame(game, ctx) {
   drawBuildings(game, ctx, vis);
   drawLights(game, ctx, vis);
   drawEffects(game, ctx);
+  for (const heli of game.helis) {
+    if (heli.x < vis.x0 || heli.x > vis.x1 || heli.y < vis.y0 || heli.y > vis.y1) continue;
+    drawHeliShadow(game, ctx, heli);
+  }
   for (const car of game.cars) {
     if (car.x < vis.x0 || car.x > vis.x1 || car.y < vis.y0 || car.y > vis.y1) continue;
     drawCarShape(ctx, car, dusk);
@@ -372,14 +526,18 @@ export function renderGame(game, ctx) {
     if (p.x < vis.x0 || p.x > vis.x1 || p.y < vis.y0 || p.y > vis.y1) continue;
     drawPed(ctx, p);
   }
+  for (const heli of game.helis) {
+    if (heli.x < vis.x0 || heli.x > vis.x1 || heli.y < vis.y0 || heli.y > vis.y1) continue;
+    drawHeli(game, ctx, heli);
+  }
   drawPlayer(ctx, game);
   ctx.restore();
 
   // Dusk tint + vignette over everything.
   if (dusk > 0.02) {
-    ctx.fillStyle = `rgba(255,110,40,${0.10 * dusk})`;
+    ctx.fillStyle = `rgba(255,110,40,${0.13 * dusk})`;
     ctx.fillRect(0, 0, v.w, v.h);
-    ctx.fillStyle = `rgba(8,10,40,${0.20 * dusk})`;
+    ctx.fillStyle = `rgba(8,10,40,${0.26 * dusk})`;
     ctx.fillRect(0, 0, v.w, v.h);
   }
   const grad = ctx.createRadialGradient(v.w / 2, v.h / 2, Math.min(v.w, v.h) * 0.42, v.w / 2, v.h / 2, Math.max(v.w, v.h) * 0.75);
