@@ -8,6 +8,9 @@ import { CAR_TYPES } from './config.js';
 import { makeCar, spawnTraffic, spawnParked } from './traffic.js';
 import { spawnPeds } from './pedestrians.js';
 import { jumpToStage } from './missions.js';
+import { makeHeli, spawnParkedHeli } from './helicopter.js';
+import { radioOn } from './radio.js';
+import { waterLineY } from './world.js';
 
 export const SHOT_NAMES = ['cover', 'drive', 'mission', 'chase'];
 
@@ -15,12 +18,14 @@ function freshStreets(game) {
   game.cars = [];
   game.cops = [];
   game.peds = [];
+  game.helis = [];
   game.particles = [];
   game.skids = [];
   game.tracers = [];
   game.cars.push(...spawnTraffic(game, 12));
   game.cars.push(...spawnParked(game, 10));
   game.peds = spawnPeds(game, 22);
+  spawnParkedHeli(game);
 }
 
 function placePlayerCar(game, type, x, y, angle, color, speed) {
@@ -66,24 +71,30 @@ export function setupShot(game, name) {
   freshStreets(game);
 
   if (name === 'cover') {
-    // Dusk police chase on the beachfront road: the money shot.
+    // Dusk police chase on the beachfront road — with the PD heli overhead:
+    // the money shot. 3 stars, minimap, mission objective, spotlight.
     game.timeOfDay = 0.52;
-    jumpToStage(game, 0, 1); // "Pick up Marisol at the Marina"
-    game.missions.done = [false, false, false, false];
+    jumpToStage(game, 4, 1); // "The Gull Run": board the helicopter
+    game.missions.done = [true, true, true, true, false, false, false, false];
     placePlayerCar(game, 'sports', 2350, 4600, 0, '#e83e8c', 300);
     placeCop(game, 2130, 4592, 0, 315);
     placeCop(game, 2040, 4628, 0.12, 305);
+    const heli = makeHeli('police', 2700, 4550, 0);
+    heli.alt = 170;
+    game.helis.push(heli);
     skidTrail(game, 2200, 4600, 0, 8);
     game.addParticle(2140, 4592, '#ffb347', 10);
     runSteps(game, 40, true);
     game.wanted = 3;
     game.cops = game.cops.slice(0, 2);
   } else if (name === 'drive') {
-    // Daytime cruise through the city grid, traffic all around.
+    // Daytime cruise through the city grid, traffic all around, radio on.
     game.timeOfDay = 0.15;
     jumpToStage(game, 0, 0);
-    game.missions.done = [false, false, false, false];
+    game.missions.done = [false, false, false, false, false, false, false, false];
     placePlayerCar(game, 'sedan', 1400, 1000, 0, '#3d7ac9', 235);
+    game.radio.station = 1; // NEON 101
+    radioOn(game);
     // A few neighbours on the same road so the cruise reads as traffic.
     const t1 = makeCar('traffic', 'taxi', 1720, 1015, 0, '#f2c230');
     t1.axis = 'h'; t1.dir = 1; t1.road = 2; t1.speed = 150; t1.cruise = 160;
@@ -97,34 +108,30 @@ export function setupShot(game, name) {
     game.cops = [];
     game.cars = game.cars.filter((c) => c.kind !== 'police');
   } else if (name === 'mission') {
-    // On foot at the Marina, pickup marker overhead, taxi waiting.
-    game.timeOfDay = 0.2;
-    jumpToStage(game, 0, 1);
-    game.missions.done = [false, false, false, false];
-    game.player.inCar = null;
-    game.player.x = 330;
-    game.player.y = 4310;
-    game.player.angle = Math.atan2(4380 - 4310, 240 - 330);
-    game.player.ammo = 12;
-    game.camera.x = 330;
-    game.camera.y = 4310;
-    const taxi = makeCar('parked', 'taxi', 430, 4380, Math.PI / 2, '#f2c230');
-    game.cars.push(taxi);
-    runSteps(game, 40, false);
+    // Tide Runner: low tide, the beach is a wide open highway of sand.
+    game.timeOfDay = 0.15;
+    game.tide = 0.05;
+    game.tidePhase = Math.acos(1 - 2 * 0.05) / (2 * Math.PI);
+    game.waterLineY = waterLineY(game.tide);
+    jumpToStage(game, 6, 0); // "Tide Runner": Flag 1, West Beach
+    game.missions.done = [true, true, true, true, true, true, false, false];
+    placePlayerCar(game, 'sports', 800, 4580, 0, '#22c1a3', 260);
+    skidTrail(game, 700, 4580, 0, 6);
+    runSteps(game, 40, true);
     game.wanted = 0;
     game.cops = [];
     game.cars = game.cars.filter((c) => c.kind !== 'police');
   } else if (name === 'chase') {
-    // Second action shot: taxi boxed in by three cruisers at dusk.
+    // Deco Dash: neon dusk in the old town, taxi boxed in by three cruisers.
     game.timeOfDay = 0.55;
-    game.missions.done = [true, false, false, false];
-    jumpToStage(game, 1, 0); // "Pick up the package at the Docks"
-    placePlayerCar(game, 'taxi', 3000, 2200, -Math.PI / 2, '#f2c230', 315);
-    placeCop(game, 2950, 2470, -Math.PI / 2, 320);
-    placeCop(game, 3075, 2420, -Math.PI / 2 + 0.2, 318);
-    placeCop(game, 2915, 2300, -Math.PI / 2 - 0.15, 310);
-    skidTrail(game, 3000, 2320, -Math.PI / 2, 7);
-    game.addParticle(2970, 2400, '#ffb347', 12);
+    game.missions.done = [true, true, true, true, true, true, true, false];
+    jumpToStage(game, 7, 0); // "Deco Dash": Checkpoint 1, Palm Court
+    placePlayerCar(game, 'taxi', 1000, 1000, -Math.PI / 2, '#f2c230', 315);
+    placeCop(game, 950, 1270, -Math.PI / 2, 320);
+    placeCop(game, 1075, 1220, -Math.PI / 2 + 0.2, 318);
+    placeCop(game, 915, 1100, -Math.PI / 2 - 0.15, 310);
+    skidTrail(game, 1000, 1120, -Math.PI / 2, 7);
+    game.addParticle(970, 1200, '#ffb347', 12);
     runSteps(game, 40, true);
     game.wanted = 4;
     game.cops = game.cops.slice(0, 3);
