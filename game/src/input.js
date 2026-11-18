@@ -1,53 +1,74 @@
-// Keyboard and pointer input. Held keys give a steering direction; one-shot presses (start or
-// restart, pause) are queued as bit flags and taken once by the loop, so a press between two
-// frames is never lost and never counted twice.
+// Solmar Heat — input.js
+// Keyboard + mouse state, written so the headless autopilot can drive it by
+// poking the same sets the browser listeners fill. Edge presses (pressed())
+// are consumed once per frame by the game loop calling endFrame().
 
-export const ACTION_CONFIRM = 1;
-export const ACTION_PAUSE = 2;
+export class Input {
+  constructor() {
+    this.keys = new Set();
+    this.edge = new Set();
+    this.mouse = { x: 0, y: 0, down: false, clicked: false };
+    this._attached = false;
+  }
 
-const LEFT = new Set(['ArrowLeft', 'KeyA']);
-const RIGHT = new Set(['ArrowRight', 'KeyD']);
-const CONFIRM = new Set(['Space', 'Enter']);
-const PAUSE = new Set(['KeyP', 'Escape']);
+  attach(canvas) {
+    if (this._attached || typeof window === 'undefined') return;
+    this._attached = true;
+    window.addEventListener('keydown', (e) => {
+      if (['ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight', 'Space'].includes(e.code)) e.preventDefault();
+      if (!this.keys.has(e.code)) this.edge.add(e.code);
+      this.keys.add(e.code);
+    });
+    window.addEventListener('keyup', (e) => this.keys.delete(e.code));
+    window.addEventListener('blur', () => { this.keys.clear(); this.mouse.down = false; });
+    canvas.addEventListener('mousemove', (e) => {
+      const r = canvas.getBoundingClientRect();
+      this.mouse.x = e.clientX - r.left;
+      this.mouse.y = e.clientY - r.top;
+    });
+    canvas.addEventListener('mousedown', (e) => {
+      if (e.button === 0) { this.mouse.down = true; this.mouse.clicked = true; }
+    });
+    window.addEventListener('mouseup', () => { this.mouse.down = false; });
+    canvas.addEventListener('contextmenu', (e) => e.preventDefault());
+  }
 
-export function createInput(target) {
-  let left = false;
-  let right = false;
-  let actions = 0;
+  down(code) { return this.keys.has(code); }
 
-  window.addEventListener('keydown', (event) => {
-    if (LEFT.has(event.code)) left = true;
-    else if (RIGHT.has(event.code)) right = true;
-    else if (CONFIRM.has(event.code)) {
-      if (!event.repeat) actions |= ACTION_CONFIRM;
-    } else if (PAUSE.has(event.code)) {
-      if (!event.repeat) actions |= ACTION_PAUSE;
-    } else return;
-    event.preventDefault();
-  });
-  window.addEventListener('keyup', (event) => {
-    if (LEFT.has(event.code)) left = false;
-    else if (RIGHT.has(event.code)) right = false;
-  });
-  // A key released while the tab is hidden never sends keyup: let go of everything on blur.
-  window.addEventListener('blur', () => {
-    left = false;
-    right = false;
-  });
-  target.addEventListener('pointerdown', () => {
-    actions |= ACTION_CONFIRM;
-  });
+  // True only on the frame the key went down.
+  pressed(code) { return this.edge.has(code); }
 
-  return {
-    /** -1 for left, 1 for right, 0 for neither or both. */
-    direction() {
-      return (right ? 1 : 0) - (left ? 1 : 0);
-    },
-    /** The one-shot presses since the last call, as ACTION_* flags. */
-    takeActions() {
-      const taken = actions;
-      actions = 0;
-      return taken;
-    },
-  };
+  // Test/autopilot helper: pretend a key is held.
+  hold(code) { this.keys.add(code); this.edge.add(code); }
+  release(code) { this.keys.delete(code); }
+  tap(code) { this.hold(code); }
+
+  // WASD / arrows as a -1..1 pair.
+  moveAxis() {
+    let x = 0, y = 0;
+    if (this.down('KeyA') || this.down('ArrowLeft')) x -= 1;
+    if (this.down('KeyD') || this.down('ArrowRight')) x += 1;
+    if (this.down('KeyW') || this.down('ArrowUp')) y -= 1;
+    if (this.down('KeyS') || this.down('ArrowDown')) y += 1;
+    return { x, y };
+  }
+
+  get throttle() {
+    return (this.down('KeyW') || this.down('ArrowUp')) ? 1 : 0;
+  }
+  get brake() {
+    return (this.down('KeyS') || this.down('ArrowDown')) ? 1 : 0;
+  }
+  get steer() {
+    let s = 0;
+    if (this.down('KeyA') || this.down('ArrowLeft')) s -= 1;
+    if (this.down('KeyD') || this.down('ArrowRight')) s += 1;
+    return s;
+  }
+  get handbrake() { return this.down('Space'); }
+
+  endFrame() {
+    this.edge.clear();
+    this.mouse.clicked = false;
+  }
 }
